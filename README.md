@@ -16,12 +16,61 @@ The open sourced models are as follows:
 |LPPN(Medium)|0.4|0.808|Broad band|100Hz|EHZ|300km|Global|Pg、Sg|
 |LPPN(Tinny)|0.3|0.757|Broad band|100Hz|EHZ|300km|Global|Pg、Sg|
 |UNet++|12|0.798|Broad band|100Hz|EHZ|300km|Global|Pg、Sg|
-|pnsn(The model is used in our article)|1.9|0.781|Broad band, MEMS, |100Hz|EHZ|2000km|Global|Pg、Sg、Pn、Sn|
+|pnsn(**The model is used in our article**)|1.9|0.781|Broad band, MEMS, |100Hz|EHZ|2000km|Global|Pg、Sg、Pn、Sn|
+|pnsn.diff(**The model is used in our article**)|1.9|0.781|Broad band, MEMS, |100Hz|EHZ|2000km|Global|Pg、Sg、Pn、Sn|
 |tele|1.9|0.800|Broad band|20Hz|EHZ|>3000km|Global|P|
 |BRNN|1.9|0.807|Broad band|100Hz|Any|300km|Global|Pg、Sg|
 
+pnsn.jit is the model used in our article for the first inference strategy and pnsn.diff.jit is the model used in our article for the second inference strategy. You can put any length of the three components data to the model. 
+
+Example usage:
+```python 
+import numpy as np  # Import NumPy for numerical operations
+import torch         # Import PyTorch for loading and running the model
+import obspy         # Import ObsPy for reading seismic waveform data (install via `pip install obspy`)
+
+mname = "pickers/pnsn.jit"  # Path to the TorchScript seismic phase picking model
+device = torch.device("cpu")  # Set the inference device to CPU
+sess = torch.jit.load(mname)  # Load the serialized TorchScript model
+sess.eval()  # Set the model to evaluation (inference) mode
+sess.to(device)  # Move the model to the specified device (CPU)
+
+# Read three-component seismic waveform data from SAC files
+st1 = obspy.read("data/waveform/X1.53085.01.BHE.D.20122080726235953.sac")  # East component
+st2 = obspy.read("data/waveform/X1.53085.01.BHN.D.20122080726235953.sac")  # North component
+st3 = obspy.read("data/waveform/X1.53085.01.BHZ.D.20122080726235953.sac")  # Vertical component
+data = [st1[0].data, st2[0].data, st3[0].data]  # Extract waveform arrays from the Trace objects
+
+x = np.stack(data, axis=1).astype(np.float32)  # Stack the 3 components into shape [N, 3] and convert to float32
+with torch.no_grad():  # Disable gradient tracking for inference
+    x = torch.tensor(x, dtype=torch.float32, device=device)  # Convert NumPy array to PyTorch tensor on CPU
+    y = sess(x)  # Run inference through the model
+    phase = y.cpu().numpy()  # Convert model output to NumPy array (post-processing done separately)
+
+import matplotlib.pyplot as plt  # Import Matplotlib for plotting
+
+plt.plot(x[:, 2], alpha=0.5)  # Plot the vertical (Z) component waveform
+
+# Loop over each picked phase and draw a vertical line at the picked time
+for pha in phase:
+    if pha[0]==0:  # Pg phase
+        c = "r"  # Red
+    elif pha[0]==1:  # Sg phase
+        c = "b"  # Blue
+    elif pha[0]==2:  # Pn phase
+        c = "g"  # Green
+    else:  # Sn phase or others
+        c = "k"  # Black
+    plt.axvline(pha[1], c=c)  # Draw vertical line at phase pick time with corresponding color
+
+plt.show()  # Display the plot
+
+```
+
+
+
 #### 1.1 Recommended models:
-1. If accuracy is more important, RNN can be used. We have tested it on mobile networks, dense networks, and fixed networks at the global level.
+1. If accuracy is more important, pnsn can be used. We have tested it on mobile networks, dense networks, and fixed networks at the global level.
 2. If memory is limited and speed is more important, LPPNM can be used.
 3. If recall rate is low, we recommend using a threshold of 0.1 (pickers/rnn.01.jit), or using the PnSn model. Although the F1 score was low in testing, this was due to testing with manually labeled data within 2000km.
 4. For some tasks that require confidence scores for each sampling point, an onnx model can be used.
@@ -136,15 +185,6 @@ PHASE,TIME,LAT,LON,TYPE,PROB,STATION,DIST,DELTA,ERROR#
 EVENT,2022-04-09 02:28:38.021000,100.6492,25.3660,PICKED_PHASE_TIME_LAT_LON_TYPE_PROB_STATION_DIST_DELTA_ERROR#
 PHASE_PICKED_TIME_LAT_LON_TYPE_PROB_STATION_DIST_DELTA_ERROR#
 ```
-
-
-### Please refer to the code for the format of the station directory.
-When citing this work in a paper or publication please use:
-1.LPPN: A Lightweight Network for Fast Phase Picking,
-https://doi.org/10.1785/02202103092
-2.Yu ZY,Wang WT and Chen YN (2022). Benchmark on accuracy and efficiency of several neural network based phase pickers using datasets from China seismic network.
-Earthq Sci35,
-doi:10 .1016/j.eqs .2022 .10 .001
 
 ### Open Source License
 GPLv3
