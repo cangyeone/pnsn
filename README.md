@@ -85,8 +85,7 @@ plt.show()  # Display the plot
 7. The data needs to be sampled at 100Hz.
 8.The accuracy has not been fully tested yet; only 10,000 waveforms of 102.4 seconds within 2000km from year 2020 were used for testing with results shown in the figure.
 9.We found that after high-pass filtering (differentiation), the picking effect for large earthquakes was better; therefore we created a model for picking original + differentiated data as an example: makejit.pnsn.diff.py.Output models are: rnn.origdiff.pnsn.jit
-
-![](pickers/china.pnsn.jpg)
+10. The pnsn model was originally on 2022, however, we have updated it pnsn.jit and pnsn.diff.jit on 2025 in our article. The orignal accuracy is shown in [pickers/china.pnsn.jpg]. 
 
 
 Call in python interface
@@ -120,7 +119,7 @@ Due to the complexity of writing programs in C language, we have merged the time
      [number of categories, noise probability,P-wave probability,S-wave probability],
      [sample points, noise probability,P-wave probability,S-wave probability],
      .....]
-For examples using C language version programs please contact cangye@hotmail.com.
+For examples using C language version programs please contact yuziye@cea-igp.ac.cn.
 
 ### 3. make onnx and jit files
 See the example programs makeonnx.xxx.jit and makejit.xxx.jit. In the .jit file:
