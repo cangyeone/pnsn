@@ -133,7 +133,7 @@ All TorchScript pickers share the same interface via `jit_picker_base.py::Slidin
 3. Wraps the network with sliding-window preprocessing, softmax, and non-maximum suppression.
 4. Saves the scripted model into `pickers/*.jit`.
 
-To rebuild the packaged TorchScript files, run the corresponding script (for example `python makejit.unet.py`, `python makejit.unetpp.py`, `python makejit.rnn.py`, `python makejit.pnsn.py`, or `python makejit.eqt.py`). The output `.jit` files include post-processing, so they return `[phase_type, relative_sample, confidence]` directly when you call `torch.jit.load`.
+To rebuild the TorchScript files, run the corresponding script (for example `python makejit.unet.py`, `python makejit.unetpp.py`, `python makejit.rnn.py`, `python makejit.pnsn.py`, or `python makejit.eqt.py`). The output `.jit` files include post-processing, so they return `[phase_type, relative_sample, confidence]` directly when you call `torch.jit.load`.
 
 Key thresholds baked into the picker interface:
 ```python
@@ -144,7 +144,14 @@ selidx = torch.masked_select(selidx, torch.abs(ref - ntime) > 1000)  # NMS windo
 * `1000` samples (10 seconds at 100 Hz) enforce a single pick per class within that window. Reduce the window if multiple phases are expected in short succession.
 
 #### 3.2 Building `.onnx` pickers
-Use the companion `makeonnx.XXX.py` scripts to export ONNX versions of each network. **The onnx model can use config/picker.py for post-processing as it is outside of the model itself**
+All ONNX pickers share the `OnnxSlidingWindowPicker` interface defined in `onnx_picker_base.py`. To regenerate the exported ONNX
+files:
+1. Run the corresponding script (for example `python makeonnx.unet.py`, `python makeonnx.unetpp.py`, `python makeonnx.rnn.py`,
+   `python makeonnx.pnsn.py`, or `python makeonnx.eqt.py`).
+2. Each script builds the model (`self.model = UNet()`/`BRNN()`/`EQTransformer()`, etc.), loads checkpoints (auto-prefixing with
+   `model.` when needed), and wraps it with the shared sliding-window preprocessing.
+3. Post-processing (probability threshold and NMS) remains outside the ONNX graph; reuse `config/picker.py` together with the
+   `post` helpers in `picker.onnx.py` or `picker.py` when running inference.
 
 #### 3.2 Building `.onnx` pickers
 Use the companion `makeonnx.XXX.py` scripts to export ONNX versions of each network. **The onnx model can use config/picker.py for post-processing as it is outside of the model itself**
