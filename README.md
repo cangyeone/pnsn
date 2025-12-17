@@ -1,12 +1,11 @@
 ### 1. Instructions for using the national 100Hz model
-1. Training data, all models are based on the 2009-2019 national seismic network training of the 100Hz model, which can be directly used for continuous data picking.
-2. The model training data is based on stations within a distance of 800km from the epicenter and includes PS wave data.
-3. Currently, it has been tested based on three phases of ChinArray data, and the recall rate of RNN model manually labeled data is not less than 80%.
-4. Different models' accuracy and speed are shown in the figure.
-![](pickers/speed.jpg)
+All models in this repository are trained on 2009-2019 national seismic network data at 100 Hz. They can be applied directly to continuous three-component waveforms for automatic phase picking.
 
-#### The open sourced models
-The open sourced models are as follows:
+* Training covers stations within 800 km of the epicenter and includes P/S phases.
+* PhaseNet, RNN and LPPN style models have been validated on ChinArray data with RNN recall ≥ 80% on manually labelled sets.
+* Accuracy and speed comparisons are shown in `pickers/speed.jpg`.
+
+#### 1.1 Open sourced models
 |Model|Size(MB)|P-F1Score|Instrument|Sampling rate|Channel|Max distance|Range|Output phases|
 |:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 |BRNN|1.9|0.857|Broad band|100Hz|EHZ|300km|Global|Pg、Sg|
@@ -16,14 +15,14 @@ The open sourced models are as follows:
 |LPPN(Medium)|0.4|0.808|Broad band|100Hz|EHZ|300km|Global|Pg、Sg|
 |LPPN(Tinny)|0.3|0.757|Broad band|100Hz|EHZ|300km|Global|Pg、Sg|
 |UNet++|12|0.798|Broad band|100Hz|EHZ|300km|Global|Pg、Sg|
-|pnsn(**The model is used in our article**)|1.9|0.781|Broad band, MEMS, |100Hz|EHZ|2000km|Global|Pg、Sg、Pn、Sn|
-|pnsn.diff(**The model is used in our article**)|1.9|0.781|Broad band, MEMS, |100Hz|EHZ|2000km|Global|Pg、Sg、Pn、Sn|
+|pnsn (**used in the paper**)|1.9|0.781|Broad band, MEMS|100Hz|EHZ|2000km|Global|Pg、Sg、Pn、Sn|
+|pnsn.diff (**used in the paper**)|1.9|0.781|Broad band, MEMS|100Hz|EHZ|2000km|Global|Pg、Sg、Pn、Sn|
 |tele|1.9|0.800|Broad band|20Hz|EHZ|>3000km|Global|P|
-|BRNN|1.9|0.807|Broad band|100Hz|Any|300km|Global|Pg、Sg|
 
-pnsn.jit is the model used in our article for the first inference strategy and pnsn.diff.jit is the model used in our article for the second inference strategy. You can put any length of the three components data to the model. 
+`pickers/pnsn.jit` implements the first inference strategy and `pickers/pnsn.diff.jit` the second; both accept waveforms of arbitrary length.
 
-Example usage:
+#### 1.2 TorchScript quick start
+The TorchScript models in `pickers/` ship with all post-processing (thresholding and non-maximum suppression) baked into the graph. They expect three-component waveforms resampled to 100 Hz and output `[phase_type, relative_sample, confidence]` for each pick.
 ```python 
 import numpy as np  # Import NumPy for numerical operations
 import torch         # Import PyTorch for loading and running the model
@@ -69,13 +68,13 @@ plt.show()  # Display the plot
 
 
 
-#### 1.1 Recommended models:
-1. If accuracy is more important, pnsn can be used. We have tested it on mobile networks, dense networks, and fixed networks at the global level.
-2. If memory is limited and speed is more important, LPPNM can be used.
-3. If recall rate is low, we recommend using a threshold of 0.1 (pickers/rnn.01.jit), or using the PnSn model. Although the F1 score was low in testing, this was due to testing with manually labeled data within 2000km.
-4. For some tasks that require confidence scores for each sampling point, an onnx model can be used.
+#### 1.3 Recommended models
+1. If accuracy is most important, prefer the pnsn/pnsn.diff variants (tested on mobile, dense, and fixed global networks).
+2. If memory is tight or speed matters, choose LPPN models.
+3. For low recall scenarios, lower the confidence threshold to 0.1 (for example `pickers/rnn.01.jit`) or use the Pn/Sn-aware models.
+4. When per-sample confidence traces are required, use an ONNX model and handle post-processing externally.
 
-#### 1.2 Pn and Sn phase picking model
+#### 1.4 Pn and Sn phase picking model
 1. In order to make the model more universal, we trained a new model using 2000km of manually labeled data.
 2. The model is called rnn.pnsn.jit.
 3. Based on the RNN model, it can simultaneously pick P, S, Pn, and Sn phases.
@@ -85,7 +84,7 @@ plt.show()  # Display the plot
 7. The data needs to be sampled at 100Hz.
 8.The accuracy has not been fully tested yet; only 10,000 waveforms of 102.4 seconds within 2000km from year 2020 were used for testing with results shown in the figure.
 9.We found that after high-pass filtering (differentiation), the picking effect for large earthquakes was better; therefore we created a model for picking original + differentiated data as an example: makejit.pnsn.diff.py.Output models are: rnn.origdiff.pnsn.jit
-10. The pnsn model was originally on 2022, however, we have updated it pnsn.jit and pnsn.diff.jit on 2025 in our article. The orignal accuracy is shown in [pickers/china.pnsn.jpg]. 
+10. The pnsn model was originally released in 2022, and updated `pnsn.jit` and `pnsn.diff.jit` were released in 2025 in our paper. The original accuracy is shown in [pickers/china.pnsn.jpg].
 
 
 Call in python interface
@@ -99,27 +98,32 @@ with torch.no_grad():
     phase = y.cpu().numpy()# [Number of phases, 1P, 2S, 3Pn, 4Sn]
 ```
 
-#### 1.3 Distant Earthquake Picking Model
-We have added a new model tele.rnn.jit for distant earthquake picking, which is used for picking the PS phase of distant earthquakes.
+#### 1.5 Distant Earthquake Picking Model
+We provide `tele.rnn.jit` for distant event picking. It outputs distant P/S phases at 20 Hz.
+
+#### 1.6 Environment and data prerequisites
+The examples in this repository rely on common scientific Python packages: `torch`, `numpy`, `obspy`, `scipy`, `matplotlib`, and `tqdm` (see the imports in `picker.py`). The picker utilities assume three-component waveforms sampled at 100 Hz with channel names such as `BHE/BHN/BHZ` and file extensions ending in `.mseed` by default (see `config/picker.py`).
 
 ### 2. Model Usage Instructions
 We provide three types of model files:
-1. .pt files in the ckpt folder, which can be used for transfer learning and easily transferred to local data. It is recommended to fix some trainable parameters during transfer training.
-2. Models for picking any length are located in the pickers folder.
-   - .jit for direct use with PyTorch, which can directly output phase relative arrival time and phase type information.
-   - .onnx for use with onnxruntime library, which is lighter than PyTorch and suitable for picking on edge devices. Due to the simple API provided, post-processing needs to be done externally.
-- The output format of .jit files is: [number of phases, phase type + relative arrival time + confidence], all jit files are like this. Phase types: 1:P, 2:S.
-- The .onnx output has two parts: a probability prob and a time time; for example prob[i] represents the probability of different phase types at point i, it is a vector of length 3; time[i] represents the relative moment at point i. Time and prob need to be used together in order to perform picking.
-- Example usage of .jit can be found in picker.jit.py
-- Example usage of .onnx can be found in picker.onnx.py
+1. `.pt` files in the `ckpt` folder, which can be used for transfer learning. Freeze some parameters when adapting to local data.
+2. Models for picking any length are located in the `pickers` folder.
+   - `.jit` for direct use with PyTorch; post-processing is embedded in the graph and outputs `[phase_type, relative_sample, confidence]` per pick.
+   - `.onnx` for use with `onnxruntime`, suitable for edge devices. Use the `post` functions in `picker.onnx.py` or `picker.py` to apply the probability threshold (`a`) and non-maximum suppression window (`b`) to the raw `prob` and `time` outputs.
+- `.jit` output format: `[number of phases, phase type + relative arrival time + confidence]`. Phase types: 1:P, 2:S (Pn/Sn models extend this list).
+- `.onnx` outputs two tensors: `prob[i]` (per-sample class probabilities, length 3) and `time[i]` (relative sample index). Combine them with post-processing to form picks.
+- Example usage of .jit can be found in `picker.jit.py`.
+- Example usage of .onnx can be found in `picker.onnx.py`.
   
 #### 2.1 Using C Language Version Onnx Model
-Due to the complexity of writing programs in C language, we have merged the time and prob outputs from onnx into a .merge.onnx version model where the vector format becomes: 
-[    [time length, number of categories,-,-],
-     [number of categories, noise probability,P-wave probability,S-wave probability],
-     [sample points, noise probability,P-wave probability,S-wave probability],
-     .....]
-For examples using C language version programs please contact yuziye@cea-igp.ac.cn.
+For C users, `.merge.onnx` files combine the `time` and `prob` outputs into a single array:
+```
+[ [time length, number of categories, -, -],
+  [number of categories, noise probability, P-wave probability, S-wave probability],
+  [sample points, noise probability, P-wave probability, S-wave probability],
+  ... ]
+```
+For example programs in C, contact yuziye@cea-igp.ac.cn.
 
 ### 3. make onnx and jit files
 See the example programs makeonnx.xxx.jit and makejit.xxx.jit. In the .jit file:
@@ -146,17 +150,19 @@ python picker.py -i path/to/data -o outputname -m pickers/rnn.jit -d device
 
 1. output file name.txt containing all picked phases 
 2. output file name.log containing processed data information
-3. output file name.err containing problematic data information 
+3. output file name.err containing problematic data information
 
 The format of the output file is:
 ```text
 #path/to/file
-phase name,relative time(s),confident,aboulute time(%Y-%m-%d %H:%M:%S.%f),SNR,AMP,station name,other information 
+phase name,relative time(s),confident,aboulute time(%Y-%m-%d %H:%M:%S.%f),SNR,AMP,station name,other information
 ```
+
+`picker.py` exposes the `-i/--input`, `-o/--output`, `-m/--model`, and `-d/--device` arguments (see `if __name__ == "__main__"` in the script) and uses the defaults from `config/picker.py` for details such as channel count (`nchannel=3`), sampling rate (`samplerate=100`), probability threshold for ONNX models (`prob=0.3`), and non-maximum suppression window (`nmslen=1000`).
 
 
 #### 4.2 Seimic assosication
-The goal of seismic association is to determine the number, location, and timing information of earthquakes from the phase picking results. Currently, there are 3 association algorithms provided: 
+The goal of seismic association is to determine the number, location, and timing information of earthquakes from the phase picking results. Currently, there are 3 association algorithms provided:
 1. REAL methods [reallinker.py] 
 2. LPPN methods [fastlinker.py] 
 3. GaMMA methods [gammalinker.py] 
