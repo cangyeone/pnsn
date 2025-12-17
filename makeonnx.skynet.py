@@ -3,6 +3,7 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
+from onnx_picker_base import OnnxSlidingWindowPicker
 
 class Skynet(nn.Module):
     """
@@ -180,89 +181,25 @@ class Skynet(nn.Module):
 from models.UNet import PhaseNetLight 
 import torch 
 
-class Picker(Skynet):
-    def __init__(self):
-        super().__init__() 
-   
-    def forward(self, x):
-        device = x.device
-        with torch.no_grad():
-            #print("数据维度", x.shape)
-            T, C = x.shape 
-            seqlen = 30000 
-            batchstride = seqlen - 30000 // 2
-            batchlen = torch.ceil(torch.tensor(T / batchstride).to(device))
-            idx = torch.arange(0, seqlen, 1, device=device).unsqueeze(0) + torch.arange(0, batchlen, 1, device=device).unsqueeze(1) * batchstride 
-            idx = idx.clamp(min=0, max=T-1).long()
-            x = x.to(device)
-            wave = x[idx, :] 
-            wave = wave.permute(0, 2, 1)
-            wave -= torch.mean(wave, dim=2, keepdim=True)
-            max, maxidx = torch.max(torch.abs(wave), dim=2, keepdim=True) 
-            max, maxidx = torch.max(max, dim=1, keepdim=True)
-            #max = torch.std(wave, dim=2, keepdim=True)
-            wave /= (max + 1e-6)  
-            X1 = torch.relu(self.bn1(self.conv1(wave)))
-            X2 = torch.relu(self.bn2(self.conv2(X1)))
-            X3 = torch.relu(self.bn3(self.conv3(X2)))
-            X4 = torch.relu(self.bn4(self.conv4(X3)))
-            X5 = torch.relu(self.bn5(self.conv5(X4)))
-            X6 = torch.relu(self.bn6(self.conv6(X5)))
-            X7 = torch.relu(self.bn7(self.conv7(X6)))
-            X8 = torch.relu(self.bn8(self.conv8(X7)))
-            X9 = torch.relu(self.bn9(self.conv9(X8)))
-            X10 = torch.relu(self.bn10(self.conv10(X9)))
-            # extra from original UNet
-            X10_a = torch.relu(self.bn11(self.conv11(X10)))
-            X10_b = torch.relu(self.bn12(self.conv12(X10_a)))
-            X10_c = torch.relu(self.bnd0(self.dconv0(X10_b)))
-            X10_c = torch.cat(
-                (
-                    X10_c,
-                    torch.zeros((X10_c.shape[0], X10_c.shape[1], 1), device=X10_c.device),
-                ),
-                dim=-1,
-            )
-            X10_c = torch.cat((X10, X10_c), dim=1)
-            X10_d = torch.relu(self.bnd01(self.dconv01(X10_c)))
-            X11 = torch.relu(self.bnd1(self.dconv1(X10_d)))
-            X12 = torch.cat((X11, X8), dim=1)
-            X12 = torch.relu(self.bnd2(self.dconv2(X12)))
-            X13 = torch.relu(self.bnd3(self.dconv3(X12)))
-            X14 = torch.relu(self.bnd4(self.dconv4(torch.cat((X13, X6), dim=1))))
-            X15 = torch.relu(self.bnd5(self.dconv5(X14)))
-            X15 = torch.cat(
-                (X15, torch.zeros((X15.shape[0], X15.shape[1], 1), device=X15.device)),
-                dim=2,
-            )
-            X16 = torch.relu(self.bnd6(self.dconv6(torch.cat((X15, X4), dim=1))))
-            X17 = torch.relu(self.bnd7(self.dconv7(X16)))
-            X17 = torch.cat(
-                (X17, torch.zeros((X17.shape[0], X17.shape[1], 1), device=X17.device)),
-                dim=2,
-            )
-            X18 = torch.relu(self.bnd8(self.dconv8(torch.cat((X17, X2), dim=1))))
-            X19 = self.dconv9(X18)
 
-            oc = self.softmax(X19)
-            B, C, T = oc.shape 
-            tgrid = torch.arange(0, T, 1, device=device).unsqueeze(0) * 1 + torch.arange(0, batchlen, 1, device=device).unsqueeze(1) * batchstride
-            oc = oc.permute(0, 2, 1).reshape(-1, C) 
-            oc = oc[:, [2, 0, 1]]
-            ot = tgrid.squeeze()
-            ot = ot.reshape(-1) 
-        return oc, ot   
-model = Picker() 
+
+class Picker(OnnxSlidingWindowPicker):
+    def __init__(self):
+        super().__init__(Skynet, ckpt_path="skynet/skynet_models/seisbench_skynet.pt", seqlen=30000, overlap=15000)
+
+
+model = Picker()
 model.eval()
-ckpt = torch.load("skynet/skynet_models/seisbench_skynet.pt", weights_only=False, map_location="cpu")
-#state = ckpt.state_dict()
-print(ckpt)
-model.load_state_dict(ckpt)
 input_names = ["wave"]
 output_names = ["prob", "time"]
-#x = torch.randn([10, 3, 6144, 1])
 x = torch.randn([500000, 3])
-torch.onnx.export(model, x, 
-"pickers/skynet.onnx", verbose=True, 
-dynamic_axes={"wave":{0:"batch"}, "prob":{0:"batch"}, "time":{0:"batch"}}, 
-input_names=input_names, output_names=output_names, opset_version=11)
+torch.onnx.export(
+    model,
+    x,
+    "pickers/skynet.onnx",
+    verbose=True,
+    dynamic_axes={"wave": {0: "batch"}, "prob": {0: "batch"}, "time": {0: "batch"}},
+    input_names=input_names,
+    output_names=output_names,
+    opset_version=11,
+)
