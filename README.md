@@ -26,7 +26,7 @@ The TorchScript models in `pickers/` ship with all post-processing (thresholding
 ```python 
 import numpy as np  # Import NumPy for numerical operations
 import torch         # Import PyTorch for loading and running the model
-import obspy         # Import ObsPy for reading seismic waveform data (install via `pip install obspy`)
+import obspy         # Import ObsPy for reading seismic waveform data
 
 mname = "pickers/pnsn.jit"  # Path to the TorchScript seismic phase picking model
 device = torch.device("cpu")  # Set the inference device to CPU
@@ -142,6 +142,9 @@ selidx = torch.masked_select(selidx, torch.abs(ref - ntime) > 1000)  # NMS windo
 ```
 * `0.3` is the default minimum confidence. Lower it to pick more candidates at the cost of extra false triggers.
 * `1000` samples (10 seconds at 100 Hz) enforce a single pick per class within that window. Reduce the window if multiple phases are expected in short succession.
+
+#### 3.2 Building `.onnx` pickers
+Use the companion `makeonnx.XXX.py` scripts to export ONNX versions of each network. **The onnx model can use config/picker.py for post-processing as it is outside of the model itself**
 
 #### 3.2 Building `.onnx` pickers
 Use the companion `makeonnx.XXX.py` scripts to export ONNX versions of each network. **The onnx model can use config/picker.py for post-processing as it is outside of the model itself**
