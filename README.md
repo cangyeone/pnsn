@@ -147,8 +147,49 @@ selidx = torch.masked_select(selidx, torch.abs(ref - ntime) > 1000)  # NMS windo
 Use the companion `makeonnx.XXX.py` scripts to export ONNX versions of each network. **The onnx model can use config/picker.py for post-processing as it is outside of the model itself**
 
 
-### 4. Directly picking up continuous data
-#### 4.1 Phase picking
+### 4. 发布到 PyPI（pip 安装）
+如果希望让用户直接 `pip install pnsn`，可以按下面步骤整理并发布到 PyPI：
+
+1. **准备包目录**：在仓库根目录下新增一个 `pnsn/` 目录，并将可复用的 Python 模块（例如 `picker.py`、`picker.onnx.py` 等改名为合法模块名后放入其中），创建空的 `pnsn/__init__.py` 以便 `setuptools` 识别为包。
+2. **包含模型资源**：在 `MANIFEST.in`（需要新建）中添加类似 `recursive-include pickers *.jit *.onnx` 以便在打包时附带模型文件；同时在 `pyproject.toml` 中开启 `include-package-data = true`。
+3. **添加构建元数据**：创建 `pyproject.toml`，使用 `setuptools.build_meta` 作为构建后端，并补充项目名称、版本、作者、依赖等信息。例如：
+   ```toml
+   [build-system]
+   requires = ["setuptools>=64", "wheel"]
+   build-backend = "setuptools.build_meta"
+
+   [project]
+   name = "pnsn"
+   version = "0.1.0"
+   description = "P/S/Pn/Sn picking toolkit"
+   authors = [{ name = "Your Name", email = "you@example.com" }]
+   requires-python = ">=3.8"
+   dependencies = ["torch", "obspy", "numpy", "scipy", "tqdm"]
+
+   [tool.setuptools]
+   include-package-data = true
+   packages = ["pnsn"]
+
+   [project.scripts]
+   pnsn-picker = "pnsn.picker:main"          # 将 pnsn/picker.py 中的入口函数暴露为 CLI
+   pnsn-picker-onnx = "pnsn.picker_onnx:main"  # 将 onnx 版本入口暴露为 CLI
+   ```
+4. **构建并本地验证**：安装构建工具后生成发布文件，并用 pip 从本地文件验证安装是否成功：
+   ```bash
+   python -m pip install --upgrade build twine
+   python -m build         # 在 dist/ 生成 .whl 和 .tar.gz
+   python -m pip install dist/pnsn-0.1.0-py3-none-any.whl
+   ```
+5. **上传到 PyPI**：在测试仓库 `test.pypi.org` 上先行验证再上传正式 PyPI：
+   ```bash
+   # 上传到 TestPyPI
+   python -m twine upload --repository testpypi dist/*
+   # 上传到正式 PyPI（确认版本号未被占用）
+   python -m twine upload dist/*
+   ```
+
+### 5. Directly picking up continuous data
+#### 5.1 Phase picking
 Phase picking provides a more convenient way to directly traverse the directory and pick up all phases.
 ```bash 
 python picker.py -i path/to/data -o outputname -m pickers/rnn.jit -d device
@@ -167,7 +208,7 @@ phase name,relative time(s),confident,aboulute time(%Y-%m-%d %H:%M:%S.%f),SNR,AM
 `picker.py` exposes the `-i/--input`, `-o/--output`, `-m/--model`, and `-d/--device` arguments (see `if __name__ == "__main__"` in the script) and uses the defaults from `config/picker.py` for details such as channel count (`nchannel=3`), sampling rate (`samplerate=100`), probability threshold for ONNX models (`prob=0.3`), and non-maximum suppression window (`nmslen=1000`).
 
 
-#### 4.2 Seimic assosication
+#### 5.2 Seimic assosication
 The goal of seismic association is to determine the number, location, and timing information of earthquakes from the phase picking results. Currently, there are 3 association algorithms provided:
 1. REAL methods [reallinker.py] 
 2. LPPN methods [fastlinker.py] 
