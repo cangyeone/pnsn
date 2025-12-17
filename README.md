@@ -126,19 +126,25 @@ For C users, `.merge.onnx` files combine the `time` and `prob` outputs into a si
 For example programs in C, contact yuziye@cea-igp.ac.cn.
 
 ### 3. make onnx and jit files
-See the example programs makeonnx.xxx.jit and makejit.xxx.jit. In the .jit file:
+#### 3.1 Building `.jit` pickers
+All TorchScript pickers share the same interface via `jit_picker_base.py::SlidingWindowPicker`. Each `makejit.XXX.py` file simply:
+1. Constructs the underlying network with `self.model = UNet()`/`BRNN()`/`EQTransformer()`, etc.
+2. Loads a checkpoint whose keys are prefixed with `model.` (legacy checkpoints are also accepted and will be auto-prefixed).
+3. Wraps the network with sliding-window preprocessing, softmax, and non-maximum suppression.
+4. Saves the scripted model into `pickers/*.jit`.
+
+To rebuild the packaged TorchScript files, run the corresponding script (for example `python makejit.unet.py`, `python makejit.unetpp.py`, `python makejit.rnn.py`, `python makejit.pnsn.py`, or `python makejit.eqt.py`). The output `.jit` files include post-processing, so they return `[phase_type, relative_sample, confidence]` directly when you call `torch.jit.load`.
+
+Key thresholds baked into the picker interface:
 ```python
-time_sel = torch.masked_select(ot, pc>0.3)
-score = torch.masked_select(pc, pc>0.3)
+time_sel = torch.masked_select(ot, pc > 0.3)  # confidence threshold
+selidx = torch.masked_select(selidx, torch.abs(ref - ntime) > 1000)  # NMS window (samples)
 ```
-Here, 0.3 is the minimum confidence level, which seems reasonable at present. If you want to pick up more phases (and consequently more errors), you can lower this value.
-```python
-selidx = torch.masked_select(selidx, torch.abs(ref-ntime)>1000)
-nprob = torch.masked_select(nprob, torch.abs(ref-ntime)>1000)
-ntime = torch.masked_select(ntime, torch.abs(ref-ntime)>1000)
-```
-Here, 1000 represents 1000 sampling points and signifies that only the phase with the highest probability within a window of length 1000 is picked up for the same type of phase. If it is believed that there may be multiple phases within a 10-second window, this value can be lowered.
-**The onnx model can use config/picker.py for post-processing as it is outside of the model itself**
+* `0.3` is the default minimum confidence. Lower it to pick more candidates at the cost of extra false triggers.
+* `1000` samples (10 seconds at 100 Hz) enforce a single pick per class within that window. Reduce the window if multiple phases are expected in short succession.
+
+#### 3.2 Building `.onnx` pickers
+Use the companion `makeonnx.XXX.py` scripts to export ONNX versions of each network. **The onnx model can use config/picker.py for post-processing as it is outside of the model itself**
 
 
 ### 4. Directly picking up continuous data
@@ -193,3 +199,9 @@ PHASE_PICKED_TIME_LAT_LON_TYPE_PROB_STATION_DIST_DELTA_ERROR#
 
 ### Open Source License
 GPLv3
+
+### Related publication
+* **Journal:** Journal of Geophysical Research: Machine Learning and Computation (Open Access)
+* **Title:** *A Deep Learning Framework for Pg/Sg/Pn/Sn Phase Picking and Its Nationwide Implementation in Chinese Mainland*
+* **DOI:** 10.1029/2025JH000944
+* **Status:** In Production
