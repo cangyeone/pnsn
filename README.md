@@ -146,6 +146,27 @@ selidx = torch.masked_select(selidx, torch.abs(ref - ntime) > 1000)  # NMS windo
 #### 3.2 Building `.onnx` pickers
 Use the companion `makeonnx.XXX.py` scripts to export ONNX versions of each network. **The onnx model can use config/picker.py for post-processing as it is outside of the model itself**
 
+### 3. make onnx and jit files
+#### 3.1 Building `.jit` pickers
+All TorchScript pickers share the same interface via `jit_picker_base.py::SlidingWindowPicker`. Each `makejit.XXX.py` file simply:
+1. Constructs the underlying network with `self.model = UNet()`/`BRNN()`/`EQTransformer()`, etc.
+2. Loads a checkpoint whose keys are prefixed with `model.` (legacy checkpoints are also accepted and will be auto-prefixed).
+3. Wraps the network with sliding-window preprocessing, softmax, and non-maximum suppression.
+4. Saves the scripted model into `pickers/*.jit`.
+
+To rebuild the packaged TorchScript files, run the corresponding script (for example `python makejit.unet.py`, `python makejit.unetpp.py`, `python makejit.rnn.py`, `python makejit.pnsn.py`, or `python makejit.eqt.py`). The output `.jit` files include post-processing, so they return `[phase_type, relative_sample, confidence]` directly when you call `torch.jit.load`.
+
+Key thresholds baked into the picker interface:
+```python
+time_sel = torch.masked_select(ot, pc > 0.3)  # confidence threshold
+selidx = torch.masked_select(selidx, torch.abs(ref - ntime) > 1000)  # NMS window (samples)
+```
+* `0.3` is the default minimum confidence. Lower it to pick more candidates at the cost of extra false triggers.
+* `1000` samples (10 seconds at 100 Hz) enforce a single pick per class within that window. Reduce the window if multiple phases are expected in short succession.
+
+#### 3.2 Building `.onnx` pickers
+Use the companion `makeonnx.XXX.py` scripts to export ONNX versions of each network. **The onnx model can use config/picker.py for post-processing as it is outside of the model itself**
+
 
 ### 4. 发布到 PyPI（pip 安装）
 如果希望让用户直接 `pip install pnsn`，可以按下面步骤整理并发布到 PyPI：
@@ -191,7 +212,7 @@ Use the companion `makeonnx.XXX.py` scripts to export ONNX versions of each netw
 ### 5. Directly picking up continuous data
 #### 5.1 Phase picking
 Phase picking provides a more convenient way to directly traverse the directory and pick up all phases.
-```bash 
+```bash
 python picker.py -i path/to/data -o outputname -m pickers/rnn.jit -d device
 ```
 
@@ -208,7 +229,7 @@ phase name,relative time(s),confident,aboulute time(%Y-%m-%d %H:%M:%S.%f),SNR,AM
 `picker.py` exposes the `-i/--input`, `-o/--output`, `-m/--model`, and `-d/--device` arguments (see `if __name__ == "__main__"` in the script) and uses the defaults from `config/picker.py` for details such as channel count (`nchannel=3`), sampling rate (`samplerate=100`), probability threshold for ONNX models (`prob=0.3`), and non-maximum suppression window (`nmslen=1000`).
 
 
-#### 5.2 Seimic assosication
+#### 4.2 Seimic assosication
 The goal of seismic association is to determine the number, location, and timing information of earthquakes from the phase picking results. Currently, there are 3 association algorithms provided:
 1. REAL methods [reallinker.py] 
 2. LPPN methods [fastlinker.py] 
