@@ -230,6 +230,198 @@ EVENT,2022-04-09 02:28:38.021000,100.6492,25.3660,PICKED_PHASE_TIME_LAT_LON_TYPE
 PHASE_PICKED_TIME_LAT_LON_TYPE_PROB_STATION_DIST_DELTA_ERROR#
 ```
 
+
+Below is an **English version suitable for README Section 5**, written in a technical, publication-quality style, followed by a **clear “Usage” subsection** that directly matches your implementation and data interfaces. You can paste this section into your README with minimal or no modification.
+
+---
+
+## 5. Python-based REAL Earthquake Association Engine
+
+This project provides a **Python implementation of the REAL (Rapid Earthquake Association and Location) algorithm** for automated earthquake phase association and preliminary event location. The implementation preserves the core logic, decision criteria, and workflow of the original C-based REAL algorithm, while introducing improved modularity, flexible data interfaces, and high-performance acceleration through modern Python tooling.
+
+The algorithm follows the canonical REAL workflow of **P-phase initiation → grid-based association → multi-phase consistency scoring → event confirmation**. All P-phase picks are processed in chronological order using a heap-based scheduler. Each candidate trigger initiates a local three-dimensional grid search (latitude, longitude, depth), where theoretical P- and S-wave travel times are computed under a homogeneous velocity model. Observed picks falling within adaptive time windows are associated, and candidate sources are evaluated using phase count thresholds and robust origin-time scatter metrics.
+
+### Key Features
+
+* **High-performance numerical core**
+  The computationally intensive grid evaluation and phase matching are implemented using Numba JIT compilation, achieving performance comparable to the original C REAL code while maintaining Python-level readability.
+
+* **Flexible pick input formats**
+  The engine supports both traditional per-station pick files and modern single-file, multi-station pick formats that include absolute timestamps and confidence scores. All inputs are internally mapped to fixed-size NumPy arrays for efficient vectorized and JIT-compiled processing.
+
+* **Confidence-aware association**
+  Pick confidence values are preserved throughout the association process and propagated to event-phase outputs, enabling downstream quality control, weighted relocation, or uncertainty analysis.
+
+* **Strict consistency with C-REAL criteria**
+  Core constraints such as minimum P/S counts, P+S totals, same-station P–S pairing, dtps limits, and the `ispeed` phase-removal mechanism are implemented to closely match the behavior of the original REAL algorithm.
+
+* **Event–phase level output**
+  For each detected event, the engine outputs both event-level parameters (origin time, hypocenter, scatter) and detailed phase associations, including pick time, residual, source–receiver distance, confidence, and station identifier.
+
+Overall, this Python-based REAL implementation balances **algorithmic fidelity, computational efficiency, and extensibility**, making it suitable for both research-oriented seismic analysis and large-scale automated earthquake catalog production.
+
+
+
+## 5.1 Usage
+
+### 5.1.1 Input Data
+
+#### Station file
+
+The station file follows the original REAL format:
+
+```
+NET STA COMP STLO STLA ELEV
+```
+
+where elevation is given in meters.
+
+Example:
+
+```
+YN YSW03 BHZ 102.345 24.567 1850
+```
+
+#### Pick data
+
+Two pick input modes are supported:
+
+1. **Per-station files (C-REAL compatible)**
+   Each station has separate P and S files:
+
+```
+NET.STA.P.txt
+NET.STA.S.txt
+```
+
+with columns:
+
+```
+trigger_time  weight  amplitude
+```
+
+2. **Single-file multi-station picks (recommended)**
+   A single CSV-style file containing all picks:
+
+```
+#data/xxx/YN.YSW03.00.mseed
+Pg,32640.160,0.936,2021-05-21 09:04:00.165000,...,YN.YSW03.00,...
+```
+
+Required fields:
+
+* phase name (e.g., Pg, Pn, Sg)
+* relative trigger time (seconds)
+* confidence
+* absolute time string
+* station identifier (NET.STA.LOC)
+
+---
+
+### 5.1.2 Basic Workflow
+
+```python
+from real import (
+    read_station_txt,
+    load_all_picks_from_singlefile_v2,
+    FastREAL
+)
+
+# --------------------------------------------------
+# 1. Load stations
+# --------------------------------------------------
+stla, stlo, elev, net, sta = read_station_txt("stations.txt")
+
+# --------------------------------------------------
+# 2. Load picks
+# --------------------------------------------------
+MAXTIME = 2.7e6
+NNps = 20000
+
+ptrig, strig, pconf, sconf, pabs, sabs = load_all_picks_from_singlefile_v2(
+    pick_file="picks.csv",
+    net=net,
+    sta=sta,
+    max_n=NNps,
+    max_time=MAXTIME,
+    min_conf=0.0,
+)
+
+# --------------------------------------------------
+# 3. Initialize REAL engine
+# --------------------------------------------------
+real = FastREAL(
+    stla, stlo, elev,
+    ptrig, strig,
+    pabs, sabs, pconf, sconf,
+    lat_center_deg=25.0,
+    rx_deg=1.0, rh_km=30.0,
+    dx_deg=0.05, dh_km=2.0,
+    tint_sec=10.0,
+    vp0=6.0, vs0=3.5,
+    s_vp0=6.0, s_vs0=3.5,
+    np0=6, ns0=4, nps0=10, npsboth0=2,
+    std0=1.0,
+    dtps=2.0,
+    nrt=2.0,
+    gcarc0_deg=3.0,
+    ispeed=True,
+    max_time=MAXTIME,
+    net=net,
+    sta=sta,
+)
+
+# --------------------------------------------------
+# 4. Run association
+# --------------------------------------------------
+events, event_phases = real.run(
+    latref0_init=None,
+    lonref0_init=None,
+    max_events=100000
+)
+```
+
+---
+
+### 5.1.3 Output
+
+Each detected event is returned as:
+
+```
+(origin_time, latitude, longitude, depth,
+ scatter, P_count, S_count, P+S_count, PS_both)
+```
+
+Associated phase information is stored per event as:
+
+```
+(phase, pick_time_str, dt, distance_km, confidence, residual, station_id)
+```
+
+Optionally, results can be written to disk in a REAL-compatible text format using:
+
+```python
+write_events_real_format(
+    out_path="events.txt",
+    events=events,
+    real=real,
+    pabs=pabs,
+    sabs=sabs,
+    pconf=pconf,
+    sconf=sconf,
+    per_event_phase_rows=event_phases,
+)
+```
+
+---
+
+### 5.1.4 Notes
+
+* The current implementation assumes a **homogeneous velocity model**; extension to layered or 3-D models can be achieved by replacing the travel-time kernel.
+* Absolute times are treated as **naive timestamps** and used only for relative timing and output reconstruction.
+* For large station counts or dense pick sets, enabling Numba (`NUMBA_OK = True`) is strongly recommended.
+
+
 ### Open Source License
 GPLv3
 
