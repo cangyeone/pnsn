@@ -2,13 +2,16 @@
   <img src="logo.png" alt="SeismicXM logo"/>
 </p>
 
-## Related publication
 
-* **Title:** *A Deep Learning Framework for Pg/Sg/Pn/Sn Phase Picking and Its Nationwide Implementation in Mainland China* 
-* **Authors:** Yuqi Cai, Ziye Yu, et al. ([yuziye@cea-igp.ac.cn](mailto:yuziye@cea-igp.ac.cn)) 
+
+
 
 
 ## 1. Instructions for using the national 100 Hz models (continuous 3-C phase picking)
+
+**Code for:** 
+* **Title:** *A Deep Learning Framework for Pg/Sg/Pn/Sn Phase Picking and Its Nationwide Implementation in Mainland China* 
+* **Authors:** Yuqi Cai, Ziye Yu, et al. ([yuziye@cea-igp.ac.cn](mailto:yuziye@cea-igp.ac.cn)) 
 
 All models in this repository are trained on **2009–2019** national seismic network data at **100 Hz**. They are designed for **direct inference on continuous three-component waveforms** (E/N/Z) for automatic phase picking.
 
