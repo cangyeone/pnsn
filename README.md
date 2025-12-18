@@ -7,7 +7,7 @@
 
 
 
-## 1. Instructions for using the national 100 Hz models (continuous 3-C phase picking)
+## 1. Instructions for using the PnSn models and seismic event detection workflow
 
 **Code for:** 
 * **Title:** *A Deep Learning Framework for Pg/Sg/Pn/Sn Phase Picking and Its Nationwide Implementation in Mainland China* 
