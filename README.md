@@ -2,6 +2,11 @@
   <img src="logo.png" alt="SeismicXM logo"/>
 </p>
 
+## Related publication
+
+* **Title:** *A Deep Learning Framework for Pg/Sg/Pn/Sn Phase Picking and Its Nationwide Implementation in Mainland China* 
+* **Authors:** Yuqi Cai, Ziye Yu, et al. ([yuziye@cea-igp.ac.cn](mailto:yuziye@cea-igp.ac.cn)) 
+
 
 ## 1. Instructions for using the national 100 Hz models (continuous 3-C phase picking)
 
@@ -31,7 +36,7 @@ Two inference strategies (v3):
 ### 1.1 Open-sourced models
 
 | Model                     | Size (MB) | P-F1Score | Instrument      | Sampling rate | Channels | Max distance | Range  | Output phases  |
-| - | --: | --: |  | : | -: | --: |  | -- |
+| ------------------------- | --------: | --------: | --------------- | ------------: | -------: | -----------: | ------ | -------------- |
 | BRNN                      |       1.9 |     0.857 | Broadband       |        100 Hz |       3C |       300 km | Global | Pg, Sg         |
 | EQTransformer             |       3.1 |     0.852 | Broadband       |        100 Hz |       3C |       300 km | Global | Pg, Sg         |
 | PhaseNet (UNet)           |       0.8 |     0.815 | Broadband       |        100 Hz |       3C |       300 km | Global | Pg, Sg         |
@@ -43,6 +48,7 @@ Two inference strategies (v3):
 | **pnsn.v3 (paper)**       |      ~1.9 |     0.781 | Broadband, MEMS |        100 Hz |       3C |     ~2000 km | Global | Pg, Sg, Pn, Sn |
 | **pnsn.diff.v3 (paper)**  |      ~1.9 |     0.781 | Broadband, MEMS |        100 Hz |       3C |     ~2000 km | Global | Pg, Sg, Pn, Sn |
 | tele                      |      ~1.9 |     0.800 | Broadband       |         20 Hz |       3C |     >3000 km | Global | P              |
+
 
 **Important update (deployment recommendation):**
 
@@ -115,9 +121,4 @@ Input assumptions:
 * **Commercial use / integration / redistribution:** please contact the corresponding author to obtain permission and discuss licensing terms (email below). 
 
 
-
-## Related publication
-
-* **Title:** *A Deep Learning Framework for Pg/Sg/Pn/Sn Phase Picking and Its Nationwide Implementation in Mainland China* 
-* **Authors:** Yuqi Cai, Ziye Yu, et al. ([yuziye@cea-igp.ac.cn](mailto:yuziye@cea-igp.ac.cn)) 
 
