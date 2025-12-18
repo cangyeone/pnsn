@@ -7,7 +7,7 @@
 
 
 
-## 1. Instructions for using the PnSn models and seismic event detection workflow
+## SeismicX-PnSn: A Deep Learning Framework for Pg/Sg/Pn/Sn Phase Picking and Its Nationwide Implementation in Chinese Mainland
 
 **Code for:** 
 * **Title:** *A Deep Learning Framework for Pg/Sg/Pn/Sn Phase Picking and Its Nationwide Implementation in Mainland China* 
