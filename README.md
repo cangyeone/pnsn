@@ -7,7 +7,7 @@
 
 
 
-## SeismicX-PnSn: A Deep Learning Framework for Pg/Sg/Pn/Sn Phase Picking and Its Nationwide Implementation in Chinese Mainland
+# SeismicX-PnSn: A Deep Learning Framework for Pg/Sg/Pn/Sn Phase Picking and Its Nationwide Implementation in Chinese Mainland
 
 **Code for:** 
 * **Title:** *A Deep Learning Framework for Pg/Sg/Pn/Sn Phase Picking and Its Nationwide Implementation in Mainland China* 
@@ -20,8 +20,8 @@ Key notes:
 * Training primarily covers stations within ~800 km and includes local/regional **P/S** phases (Pg/Sg).
 * PhaseNet / RNN / LPPN-style models have been validated on ChinArray data with RNN recall ≥ 80% on manually labeled sets.
 * Accuracy and speed comparisons are shown in `pickers/speed.jpg`.
-
-### 1.0 About the pnsn model family (recommended)
+## 1. Introduction
+### 1.0 About the pnsn model family
 
 The **pnsn** models are designed to detect **Pg, Sg, Pn, and Sn** on continuous streams using **long windows** (≈102.4 s) and sliding inference, which improves robustness and reduces operational false triggers compared with short-window pickers. 
 
@@ -58,7 +58,7 @@ Two inference strategies (v3):
 * **Teleseismic/distant events can also be picked using the pnsn models** (especially `pnsn.v3` / `pnsn.diff.v3`) in a unified workflow.
 * The standalone **`tele.jit` is not recommended** in practice because its performance is not as stable as using pnsn directly on continuous streams (your engineering experience).
 
-### 1.2 TorchScript quick start (recommended)
+### 1.2 TorchScript quick start 
 
 TorchScript models under `pickers/` include post-processing (confidence thresholding + NMS) and output:
 
@@ -116,7 +116,214 @@ Input assumptions:
 * Typical channel naming: `BHE/BHN/BHZ`.
 * CLI defaults for continuous data traversal are defined in `config/picker.py`.
 
+## 2. Model Usage Instructions 
 
+We provide three types of model files: 1. .pt files in the ckpt folder, which can be used for transfer learning. Freeze some parameters when adapting to local data. 2. Models for picking any length are located in the pickers folder. - .jit for direct use with PyTorch; post-processing is embedded in the graph and outputs [phase_type, relative_sample, confidence] per pick. - .onnx for use with onnxruntime, suitable for edge devices. Use the post functions in picker.onnx.py or picker.py to apply the probability threshold (a) and non-maximum suppression window (b) to the raw prob and time outputs. - .jit output format: [number of phases, phase type + relative arrival time + confidence]. Phase types: 1:P, 2:S (Pn/Sn models extend this list). - .onnx outputs two tensors: prob[i] (per-sample class probabilities, length 3) and time[i] (relative sample index). Combine them with post-processing to form picks. - Example usage of .jit can be found in picker.jit.py. - Example usage of .onnx can be found in picker.onnx.py. 
+
+### 2.1 Using C Language Version Onnx Model 
+
+For C users, .merge.onnx files combine the time and prob outputs into a single array:
+[ [time length, number of categories, -, -],
+  [number of categories, noise probability, P-wave probability, S-wave probability],
+  [sample points, noise probability, P-wave probability, S-wave probability],
+  ... ]
+For example programs in C, contact yuziye@cea-igp.ac.cn. 
+
+### 2.2 Building .jit pickers 
+
+All TorchScript pickers share the same interface via jit_picker_base.py::SlidingWindowPicker. 
+Each makejit.XXX.py file simply: 
+
+1. Constructs the underlying network with self.model = UNet()/BRNN()/EQTransformer(), etc.
+2. Loads a checkpoint whose keys are prefixed with model. (legacy checkpoints are also accepted and will be auto-prefixed).
+3. Wraps the network with sliding-window preprocessing, softmax, and non-maximum suppression.
+4. Saves the scripted model into pickers/*.jit.
+  
+To rebuild the TorchScript files, run the corresponding script (for example python makejit.unet.py, python makejit.unetpp.py, python makejit.rnn.py, python makejit.pnsn.py, or python makejit.eqt.py). 
+The output .jit files include post-processing, so they return [phase_type, relative_sample, confidence] directly when you call torch.jit.load. Key thresholds baked into the picker interface:
+
+```python
+time_sel = torch.masked_select(ot, pc > 0.3)  # confidence threshold
+selidx = torch.masked_select(selidx, torch.abs(ref - ntime) > 1000)  # NMS window (samples)
+```
+
+* 0.3 is the default minimum confidence. Lower it to pick more candidates at the cost of extra false triggers.
+* 1000 samples (10 seconds at 100 Hz) enforce a single pick per class within that window.
+
+Reduce the window if multiple phases are expected in short succession. 
+
+### 2.3 Building .onnx pickers 
+
+All ONNX pickers share the OnnxSlidingWindowPicker interface defined in onnx_picker_base.py. 
+To regenerate the exported ONNX files: 
+
+1. Run the corresponding script (for example python makeonnx.unet.py, python makeonnx.unetpp.py, python makeonnx.rnn.py, python makeonnx.pnsn.py, or python makeonnx.eqt.py).
+2. Each script builds the model (self.model = UNet()/BRNN()/EQTransformer(), etc.), loads checkpoints (auto-prefixing with model. when needed), and wraps it with the shared sliding-window preprocessing.
+3. Post-processing (probability threshold and NMS) remains outside the ONNX graph; reuse config/picker.py together with the post helpers in picker.onnx.py or picker.py when running inference.
+  
+**The onnx model can use picker.py for post-processing as it is outside of the model itself** 
+
+## 3. Directly picking up continuous data 
+
+### 3.1 Phase picking 
+
+Phase picking provides a more convenient way to directly traverse the directory and pick up all phases.
+```bash
+python picker.py -i path/to/data -o outputname -m pickers/rnn.jit -d device
+```
+
+1. output file name.txt containing all picked phases
+2. output file name.log containing processed data information
+3. output file name.err containing problematic data information The format of the output file is:
+
+```text
+#path/to/file
+phase name,relative time(s),confident,aboulute time(%Y-%m-%d %H:%M:%S.%f),SNR,AMP,station name,other information
+```
+
+picker.py exposes the -i/--input, -o/--output, -m/--model, and -d/--device arguments (see if __name__ == "__main__" in the script) and uses the defaults from config/picker.py for details such as channel count (nchannel=3), sampling rate (samplerate=100), probability threshold for ONNX models (prob=0.3), and non-maximum suppression window (nmslen=1000). 
+
+### 3.2 Seimic assosication
+
+The goal of seismic association is to determine the number, location, and timing information of earthquakes from the phase picking results. Currently, there are 3 association algorithms provided: 
+1. REAL methods [reallinker.py]
+2. LPPN methods [fastlinker.py]
+3. GaMMA methods [gammalinker.py]
+  
+Both models take the picking results as input.
+```bash
+python fastlinker.py -i phase_picking_results.txt -o output_file_name.txt -s station_directory
+```
+
+The format of the station file is:
+```text
+network station LOC longitude latitude elevation(m)
+```
+
+For example:
+SC AXX 00 110.00 38.00 1000.00
+
+The structure of the output association file is:
+```text
+#EVENT,TIME,LAT,LON,DEP
+PHASE,TIME,LAT,LON,TYPE,PROB,STATION,DIST,DELTA,ERROR#
+EVENT,2022-04-09 02:28:38.021000,100.6492,25.3660,PICKED_PHASE_TIME_LAT_LON_TYPE_PROB_STATION_DIST_DELTA_ERROR#
+PHASE_PICKED_TIME_LAT_LON_TYPE_PROB_STATION_DIST_DELTA_ERROR#
+```
+
+## 4. Python-based REAL Earthquake Association Engine 
+
+This project provides a **Python implementation of the REAL (Rapid Earthquake Association and Location) algorithm** for automated earthquake phase association and preliminary event location. The implementation preserves the core logic, decision criteria, and workflow of the original C-based REAL algorithm, while introducing improved modularity, flexible data interfaces, and high-performance acceleration through modern Python tooling. The algorithm follows the canonical REAL workflow of **P-phase initiation → grid-based association → multi-phase consistency scoring → event confirmation**. All P-phase picks are processed in chronological order using a heap-based scheduler. Each candidate trigger initiates a local three-dimensional grid search (latitude, longitude, depth), where theoretical P- and S-wave travel times are computed under a homogeneous velocity model. Observed picks falling within adaptive time windows are associated, and candidate sources are evaluated using phase count thresholds and robust origin-time scatter metrics. ### Key Features * **High-performance numerical core** The computationally intensive grid evaluation and phase matching are implemented using Numba JIT compilation, achieving performance comparable to the original C REAL code while maintaining Python-level readability. * **Flexible pick input formats** The engine supports both traditional per-station pick files and modern single-file, multi-station pick formats that include absolute timestamps and confidence scores. All inputs are internally mapped to fixed-size NumPy arrays for efficient vectorized and JIT-compiled processing. * **Confidence-aware association** Pick confidence values are preserved throughout the association process and propagated to event-phase outputs, enabling downstream quality control, weighted relocation, or uncertainty analysis. * **Strict consistency with C-REAL criteria** Core constraints such as minimum P/S counts, P+S totals, same-station P–S pairing, dtps limits, and the ispeed phase-removal mechanism are implemented to closely match the behavior of the original REAL algorithm. * **Event–phase level output** For each detected event, the engine outputs both event-level parameters (origin time, hypocenter, scatter) and detailed phase associations, including pick time, residual, source–receiver distance, confidence, and station identifier. Overall, this Python-based REAL implementation balances **algorithmic fidelity, computational efficiency, and extensibility**, making it suitable for both research-oriented seismic analysis and large-scale automated earthquake catalog production. 
+
+### 4.1 Usage 
+
+### 4.2 Input Data 
+
+Station file The station file follows the original REAL format:
+NET STA COMP STLO STLA ELEV
+where elevation is given in meters. Example:
+YN YSW03 BHZ 102.345 24.567 1850
+
+Pick data Two pick input modes are supported: 
+
+1. **Per-station files (C-REAL compatible)** Each station has separate P and S files:
+NET.STA.P.txt
+NET.STA.S.txt
+with columns:
+trigger_time  weight  amplitude
+2. **Single-file multi-station picks (recommended)** A single CSV-style file containing all picks:
+#data/xxx/YN.YSW03.00.mseed
+Pg,32640.160,0.936,2021-05-21 09:04:00.165000,...,YN.YSW03.00,...
+Required fields: * phase name (e.g., Pg, Pn, Sg) * relative trigger time (seconds) * confidence * absolute time string * station identifier (NET.STA.LOC) ###
+
+### 4.3 Basic Workflow
+```python
+from real import (
+    read_station_txt,
+    load_all_picks_from_singlefile_v2,
+    FastREAL
+)
+```
+
+
+1. Load stations
+
+stla, stlo, elev, net, sta = read_station_txt("stations.txt")
+
+
+2. Load picks
+
+MAXTIME = 2.7e6
+NNps = 20000
+
+ptrig, strig, pconf, sconf, pabs, sabs = load_all_picks_from_singlefile_v2(
+    pick_file="picks.csv",
+    net=net,
+    sta=sta,
+    max_n=NNps,
+    max_time=MAXTIME,
+    min_conf=0.0,
+)
+
+
+3. Initialize REAL engine
+
+real = FastREAL(
+    stla, stlo, elev,
+    ptrig, strig,
+    pabs, sabs, pconf, sconf,
+    lat_center_deg=25.0,
+    rx_deg=1.0, rh_km=30.0,
+    dx_deg=0.05, dh_km=2.0,
+    tint_sec=10.0,
+    vp0=6.0, vs0=3.5,
+    s_vp0=6.0, s_vs0=3.5,
+    np0=6, ns0=4, nps0=10, npsboth0=2,
+    std0=1.0,
+    dtps=2.0,
+    nrt=2.0,
+    gcarc0_deg=3.0,
+    ispeed=True,
+    max_time=MAXTIME,
+    net=net,
+    sta=sta,
+)
+
+
+4. Run association
+
+events, event_phases = real.run(
+    latref0_init=None,
+    lonref0_init=None,
+    max_events=100000
+)
+
+### 4.4 Output 
+
+Each detected event is returned as:
+(origin_time, latitude, longitude, depth,
+ scatter, P_count, S_count, P+S_count, PS_both)
+Associated phase information is stored per event as:
+(phase, pick_time_str, dt, distance_km, confidence, residual, station_id)
+Optionally, results can be written to disk in a REAL-compatible text format using:
+
+```python
+write_events_real_format(
+    out_path="events.txt",
+    events=events,
+    real=real,
+    pabs=pabs,
+    sabs=sabs,
+    pconf=pconf,
+    sconf=sconf,
+    per_event_phase_rows=event_phases,
+)
+```
+
+### 4.5 Notes 
+* The current implementation assumes a **homogeneous velocity model**; extension to layered or 3-D models can be achieved by replacing the travel-time kernel.
+* Absolute times are treated as **naive timestamps** and used only for relative timing and output reconstruction.
+* For large station counts or dense pick sets, enabling Numba (NUMBA_OK = True) is strongly recommended.
 
 ## License
 
