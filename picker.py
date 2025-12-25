@@ -28,7 +28,7 @@ plt.switch_backend('agg')
 plt.rcParams['figure.figsize'] = (16, 12)
 plt.rcParams['figure.dpi'] = 150
 
-def post(prob, time, a=0.1, b=200):
+def post_old_ver(prob, time, a=0.1, b=200):
     # ab分别是概率阈值和避免重复的间隔
     # ONNX模型需要后处理
     output = []
@@ -65,6 +65,72 @@ def post(prob, time, a=0.1, b=200):
         return []
     y = np.concatenate(output, axis=0) 
     return y    
+import numpy as np
+import heapq
+from bisect import bisect_left
+
+def post(prob, time, prob_thresh=0.1, nms_win=200):
+    """
+    a: 概率阈值
+    b: NMS 去重时间间隔（同一类内，已选点±b范围内的候选点会被抑制）
+    使用最小堆（heapq）按 score 从大到小弹出（用 -score 实现）。
+    """
+    output = []
+    t, c = prob.shape
+
+    for itr in range(c - 1):
+        pc = prob[:, itr + 1]
+
+        mask = pc > prob_thresh
+        if not np.any(mask):
+            continue
+
+        time_sel = time[mask]
+        score_sel = pc[mask]
+
+        # 最小堆：存 (-score, time, idx_in_sel)
+        heap = [(-float(s), float(ts), i) for i, (s, ts) in enumerate(zip(score_sel, time_sel))]
+        heapq.heapify(heap)
+
+        # 已接受 pick 的 time（保持有序，便于用 bisect 快速检查最近邻）
+        accepted_times = []
+        accepted_idx = []
+
+        while heap:
+            neg_s, ts, i = heapq.heappop(heap)
+            s = -neg_s
+
+            # 检查 ts 是否与已选时间点冲突（只需看有序列表的前后邻居）
+            pos = bisect_left(accepted_times, ts)
+
+            conflict = False
+            if pos > 0 and abs(ts - accepted_times[pos - 1]) <= nms_win:
+                conflict = True
+            if pos < len(accepted_times) and abs(accepted_times[pos] - ts) <= nms_win:
+                conflict = True
+
+            if conflict:
+                continue
+
+            accepted_times.insert(pos, ts)
+            accepted_idx.append(i)
+
+        if len(accepted_idx) == 0:
+            continue
+
+        p_time = time_sel[accepted_idx]
+        p_prob = score_sel[accepted_idx]
+        p_type = np.full_like(p_time, itr, dtype=np.float32)
+
+        y = np.stack([p_type, p_time.astype(np.float32), p_prob.astype(np.float32)], axis=1)
+        output.append(y)
+
+    if len(output) == 0:
+        return []
+
+    return np.concatenate(output, axis=0)
+
+
 class Process():
     def __init__(self, infile="data", outfile="data/out", model="", device="cpu:0"):
         #self.base_dir = "/data/workWANGWT/yangbi/rawdata_semirealtime_archive/archive149"
@@ -284,37 +350,66 @@ class Process():
                 feedq.put(info)
             #print(f"当前文件夹{root}, {len(files)}, {feedq.qsize()}")
 
-    def infer(self, dataq, outq):
-        with torch.no_grad():
-            device = torch.device(self.device_name)
-            lppn = torch.jit.load(self.modeldir)
-            lppn.eval()
-            lppn.to(device)
-            #lppn.half()
-            print("处理进程加载完成，准备处理数据")
-            while True:
-                temp = dataq.get()
-                if len(temp)==0:break 
-                if len(temp)==1:
-                    outq.put([temp["errinfo"]])
-                    continue 
-                #print("已获取", temp["root"])
-                root = f"{temp['root']}/{temp['key']}"
-                data = temp["data"]
-                #print("当前数据中", f"{temp['root']}+++++{temp['key']}" )
-                t1 = time.perf_counter()
-                #print("处理开始", dataq.qsize())
-                data = np.vstack(data).T 
-                with torch.no_grad():
-                    nnout = lppn(torch.tensor(data, dtype=torch.float, device=device))
-                    nnout = nnout.cpu().numpy()
-                # print("处理结束")
-                t2 = time.perf_counter()
-                #print("ROOT", root)
-                # $print(f"数据{temp['root']}/{temp['key']}纯处理时间：{t2-t1}")
-                outq.put([root, nnout, temp["data"], temp["stime"],
-                          temp["fdata"], temp["pkey"], temp["errinfo"]])
     def infer2(self, dataq, outq):
+        import numpy as np
+        import onnxruntime as ort
+    
+        mname = self.modeldir  # 其他 onnx 均可
+    
+        # 1) 根据 self.device_name 选择 provider（并自动回退）
+        available = set(ort.get_available_providers())
+    
+        def pick_providers(device_name: str):
+            dn = (device_name or "").lower()
+    
+            # CUDA: 优先 CUDA，回退 CPU
+            if dn == "cuda":
+                preferred = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    
+            # MPS: onnxruntime 没有直接的 "MPSExecutionProvider"
+            # macOS 上通常用 CoreML EP（底层可走 Apple GPU/Neural Engine，视模型与系统而定）
+            elif dn == "mps":
+                preferred = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+    
+            # CPU / 其他：只用 CPU
+            else:
+                preferred = ["CPUExecutionProvider"]
+    
+            # 只保留当前环境确实可用的 providers
+            chosen = [p for p in preferred if p in available]
+            if not chosen:
+                chosen = ["CPUExecutionProvider"]
+            return chosen
+    
+        providers = pick_providers(getattr(self, "device_name", "cpu"))
+    
+        # 2) 创建 session（直接把 providers 传进去，避免先建 CPU 再 set）
+        sess_options = ort.SessionOptions()
+        sess = ort.InferenceSession(mname, sess_options=sess_options, providers=providers)
+    
+        print(f"处理进程加载完成，准备处理数据 (providers={sess.get_providers()})")
+    
+        while True:
+            temp = dataq.get()
+            if len(temp) == 0:
+                break
+            if len(temp) == 1:
+                outq.put([temp["errinfo"]])
+                continue
+    
+            root = f"{temp['root']}/{temp['key']}"
+            data = temp["data"]
+    
+            # [N, C] -> [C, N] (按你原来的逻辑)
+            data = np.vstack(data).T
+    
+            prob, time_ = sess.run(["prob", "time"], {"wave": data.astype(np.float32)})
+            nnout = post(prob, time_, global_parameter.prob, global_parameter.nmslen)
+    
+            outq.put([root, nnout, temp["data"], temp["stime"],
+                      temp["fdata"], temp["pkey"], temp["errinfo"]])
+
+    def infer2_old_ver(self, dataq, outq):
         import onnxruntime as ort
         mname =self.modeldir # 其他onnx均可
         sess = ort.InferenceSession(mname, providers=['CPUExecutionProvider'])#使用pickers中的onnx文件
