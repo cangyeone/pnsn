@@ -118,8 +118,20 @@ Input assumptions:
 
 ## 2. Model Usage Instructions 
 
-We provide three types of model files: 1. .pt files in the ckpt folder, which can be used for transfer learning. Freeze some parameters when adapting to local data. 2. Models for picking any length are located in the pickers folder. - .jit for direct use with PyTorch; post-processing is embedded in the graph and outputs [phase_type, relative_sample, confidence] per pick. - .onnx for use with onnxruntime, suitable for edge devices. Use the post functions in picker.onnx.py or picker.py to apply the probability threshold (a) and non-maximum suppression window (b) to the raw prob and time outputs. - .jit output format: [number of phases, phase type + relative arrival time + confidence]. Phase types: 1:P, 2:S (Pn/Sn models extend this list). - .onnx outputs two tensors: prob[i] (per-sample class probabilities, length 3) and time[i] (relative sample index). Combine them with post-processing to form picks. - Example usage of .jit can be found in picker.jit.py. - Example usage of .onnx can be found in picker.onnx.py. 
+We provide three types of model files: 
+1. .pt files in the ckpt folder, which can be used for transfer learning. Freeze some parameters when adapting to local data.
+2. Models for picking any length are located in the pickers folder.
+   - .jit for direct use with PyTorch; post-processing is embedded in the graph and outputs [phase_type, relative_sample, confidence] per pick.
+   - .onnx for use with onnxruntime, suitable for edge devices.
 
+Use the post functions in picker.onnx.py or picker.py to apply the probability threshold (a) and non-maximum suppression window (b) to the raw prob and time outputs. 
+   - .jit output format: [number of phases, phase type + relative arrival time + confidence]. Phase types: 1:P, 2:S (Pn/Sn models extend this list).
+   - .onnx outputs two tensors: prob[i] (per-sample class probabilities, length 3) and time[i] (relative sample index). Combine them with post-processing to form picks.
+   - Example usage of .jit can be found in picker.jit.py. - Example usage of .onnx can be found in picker.onnx.py. 
+
+**When running the phase NMS algorithm with TorchScript (.jit) models, performance bottlenecks may occur; in such cases, it is recommended to use ONNX-based inference instead. A reference implementation is provided in `picker.onnx.py`, and `picker.py` can be configured to load and run a `.onnx` model directly.**
+
+   
 ### 2.1 Using C Language Version Onnx Model 
 
 For C users, .merge.onnx files combine the time and prob outputs into a single array:
