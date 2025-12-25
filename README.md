@@ -125,9 +125,10 @@ We provide three types of model files:
    - .onnx for use with onnxruntime, suitable for edge devices.
 
 Use the post functions in picker.onnx.py or picker.py to apply the probability threshold (a) and non-maximum suppression window (b) to the raw prob and time outputs. 
-   - .jit output format: [number of phases, phase type + relative arrival time + confidence]. Phase types: 1:P, 2:S (Pn/Sn models extend this list).
-   - .onnx outputs two tensors: prob[i] (per-sample class probabilities, length 3) and time[i] (relative sample index). Combine them with post-processing to form picks.
-   - Example usage of .jit can be found in picker.jit.py. - Example usage of .onnx can be found in picker.onnx.py. 
+   - .jit output format: [[Type of phases, relative arrival time, confidence], ...]. Phase types: 0:Pg, 1:Sg, 2:Pn, 3:Sn (Pn/Sn models extend this list).
+   - .onnx outputs two tensors: prob[i] (per-sample class probabilities, length 3 (indicate Noise, Pg, Sg) or 5 (indicate Noise, Pg, Sg, Pn, Sn)) and time[i] (relative sample index). Combine them with post-processing to form picks.
+   - Example usage of .jit can be found in picker.jit.py.
+   - Example usage of .onnx can be found in picker.onnx.py. 
 
 **When running the phase NMS algorithm with TorchScript (.jit) models, performance bottlenecks may occur; in such cases, it is recommended to use ONNX-based inference instead. A reference implementation is provided in `picker.onnx.py`, and `picker.py` can be configured to load and run a `.onnx` model directly.**
 
