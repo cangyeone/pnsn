@@ -2,42 +2,71 @@ import numpy as np
 import onnxruntime as ort
 import obspy # pip install obspy 
 
-def post(prob, time, a=0.1, b=200):
-    # ab分别是概率阈值和避免重复的间隔
-    # ONNX模型需要后处理
+import numpy as np
+import heapq
+from bisect import bisect_left
+
+def post(prob, time, prob_thresh=0.1, nms_win=200):
+    """
+    a: 概率阈值
+    b: NMS 去重时间间隔（同一类内，已选点±b范围内的候选点会被抑制）
+    使用最小堆（heapq）按 score 从大到小弹出（用 -score 实现）。
+    """
     output = []
-    for itr in range(2):
-        pc = prob[:, itr+1] 
-        time_sel = time[pc>a]
-        score = pc[pc>a]
-        order = np.argsort(score)[::-1]
-        ntime = time_sel[order] 
-        nprob = score[order]
-        #print(batchstride, ntime, nprob)
-        select = -np.ones_like(order)
-        selidx = np.arange(len(order))
-        count = 0
-        while True:
-            if len(nprob)<1:
-                break 
-            ref = ntime[0]
-            idx = selidx[0]
-            select[idx] = 1 
-            count += 1 
-            #print(ref, nprob[idx])
-            kidx = np.abs(ref-ntime)>b
-            selidx = selidx[kidx] 
-            nprob = nprob[kidx] 
-            ntime = ntime[kidx]
-        p_time = time_sel[order][select>0] 
-        p_prob = score[order][select>0] 
-        p_type = np.ones_like(p_time) * itr 
-        y = np.stack([p_type, p_time, p_prob], axis=1)
-        output.append(y) 
+    t, c = prob.shape
+
+    for itr in range(c - 1):
+        pc = prob[:, itr + 1]
+
+        mask = pc > prob_thresh
+        if not np.any(mask):
+            continue
+
+        time_sel = time[mask]
+        score_sel = pc[mask]
+
+        # 最小堆：存 (-score, time, idx_in_sel)
+        heap = [(-float(s), float(ts), i) for i, (s, ts) in enumerate(zip(score_sel, time_sel))]
+        heapq.heapify(heap)
+
+        # 已接受 pick 的 time（保持有序，便于用 bisect 快速检查最近邻）
+        accepted_times = []
+        accepted_idx = []
+
+        while heap:
+            neg_s, ts, i = heapq.heappop(heap)
+            s = -neg_s
+
+            # 检查 ts 是否与已选时间点冲突（只需看有序列表的前后邻居）
+            pos = bisect_left(accepted_times, ts)
+
+            conflict = False
+            if pos > 0 and abs(ts - accepted_times[pos - 1]) <= nms_win:
+                conflict = True
+            if pos < len(accepted_times) and abs(accepted_times[pos] - ts) <= nms_win:
+                conflict = True
+
+            if conflict:
+                continue
+
+            accepted_times.insert(pos, ts)
+            accepted_idx.append(i)
+
+        if len(accepted_idx) == 0:
+            continue
+
+        p_time = time_sel[accepted_idx]
+        p_prob = score_sel[accepted_idx]
+        p_type = np.full_like(p_time, itr, dtype=np.float32)
+
+        y = np.stack([p_type, p_time.astype(np.float32), p_prob.astype(np.float32)], axis=1)
+        output.append(y)
+
     if len(output) == 0:
         return []
-    y = np.concatenate(output, axis=0) 
-    return y    
+
+    return np.concatenate(output, axis=0)
+
         
 mname = "pickers/lppnm.onnx" # 其他onnx均可
 sess = ort.InferenceSession(mname, providers=['CPUExecutionProvider'])#使用pickers中的onnx文件
