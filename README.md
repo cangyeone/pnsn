@@ -196,6 +196,56 @@ phase name,relative time(s),confident,aboulute time(%Y-%m-%d %H:%M:%S.%f),SNR,AM
 
 picker.py exposes the -i/--input, -o/--output, -m/--model, and -d/--device arguments (see if __name__ == "__main__" in the script) and uses the defaults from config/picker.py for details such as channel count (nchannel=3), sampling rate (samplerate=100), probability threshold for ONNX models (prob=0.3), and non-maximum suppression window (nmslen=1000). 
 
+You need to modify the configure file in `config/picker.py` to meet the requirement of your file format. 
+```python
+class Parameter:
+    # Data configuration
+    # nsamplesdots = 8640000      # Number of samples (no longer used)
+    nchannel = 3                 # Number of channels
+    samplerate = 100             # Sampling rate (Hz), The training samplerate of your model. 
+
+    # Picking configuration (only applicable to ONNX models;
+    # for .jit models, these settings are embedded in the model)
+    prob = 0.3                   # Confidence threshold (only for ONNX models)
+    nmslen = 1000                # NMS interval; 1000 means 1000-sample spacing
+    npicker = 1                  # Number of models used for picking;
+                                 # a single model requires ~5 GB memory per day,
+                                 # so with ~12 GB memory, this can be set to 2
+    npre = 2                     # Number of processes for data reading and preprocessing
+
+    # Data handling options
+    is_seed = True               # If True, multiple channels can be read from the same file
+    filenametag = ".mseed"       # File extension (also used for SEED files)
+
+    # Example:
+    # SC.A0801.40.EIE.D.20221400520064953.sac
+    # File name format: NET.STATION.LOC.CHANNEL.OTHERS.mseed
+    namekeyindex = [0, 1]        # Indices of NET and STATION in the file name
+    channelindex = 3             # Index of CHANNEL (component identifier) in the file name;
+                                 # for nationwide stations, this is typically 5
+
+    chnames = [
+        ["BHE", "BHN", "BHZ"],
+        ["SHE", "SHN", "SHZ"],
+        ["HHE", "HHN", "HHZ"],
+        ["EIE", "EIN", "EIZ"],
+        ["HNN", "HNE", "HNZ"],
+        ["E", "N", "Z"],
+    ]                             # Channel component names; all possible sets must be included.
+                                  # Z component must be last for first-motion polarity calculation
+
+    polar = False                 # Whether to output first-motion direction
+
+    # Output configuration
+    ifplot = False                # Whether to plot picked waveforms
+    ifreal = False                # Whether to output REAL association data (daily interval)
+    snritv = 100                  # Time window length for SNR calculation
+    bandpass = [1, 10]            # Bandpass filter parameters for SNR calculation
+
+```
+
+
+
 ### 3.2 Seimic assosication
 
 The goal of seismic association is to determine the number, location, and timing information of earthquakes from the phase picking results. Currently, there are 3 association algorithms provided: 
