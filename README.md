@@ -196,54 +196,96 @@ phase name,relative time(s),confident,aboulute time(%Y-%m-%d %H:%M:%S.%f),SNR,AM
 
 picker.py exposes the -i/--input, -o/--output, -m/--model, and -d/--device arguments (see if __name__ == "__main__" in the script) and uses the defaults from config/picker.py for details such as channel count (nchannel=3), sampling rate (samplerate=100), probability threshold for ONNX models (prob=0.3), and non-maximum suppression window (nmslen=1000). 
 
-You need to modify the configure file in `config/picker.py` to meet the requirement of your file format. 
+
+#### 3.1.1 Configuration and File Organization Requirements
+
+Before running the picker, you **must** modify the configuration file `config/picker.py` to match your waveform file format and data organization.
+
+
+#### 3.1.2 Three-Component Requirement (Critical)
+
+**Each station must be represented by exactly three component files within the same directory.**
+
+* The picker assumes **one station = one 3-component set (E/N/Z or equivalent)**.
+* If more than three component files exist for the same station in a directory, **the extra files will be ignored and NOT processed**.
+* If fewer than three components are found, **the station will be skipped entirely**.
+
+This design is intentional and ensures strict consistency for three-component phase picking and polarity analysis.
+
+
+#### 3.1.3 How Three-Component Correspondence Is Determined (Very Important)
+
+Many users organize their data by placing **all time segments of a station into the same directory**.
+**This is NOT supported by default.**
+
+The correspondence between three components is determined **only** by:
+
 ```python
-class Parameter:
-    # Data configuration
-    # nsamplesdots = 8640000      # Number of samples (no longer used)
-    nchannel = 3                 # Number of channels
-    samplerate = 100             # Sampling rate (Hz), The training samplerate of your model. 
-
-    # Picking configuration (only applicable to ONNX models;
-    # for .jit models, these settings are embedded in the model)
-    prob = 0.3                   # Confidence threshold (only for ONNX models)
-    nmslen = 1000                # NMS interval; 1000 means 1000-sample spacing
-    npicker = 1                  # Number of models used for picking;
-                                 # a single model requires ~5 GB memory per day,
-                                 # so with ~12 GB memory, this can be set to 2
-    npre = 2                     # Number of processes for data reading and preprocessing
-
-    # Data handling options
-    is_seed = True               # If True, multiple channels can be read from the same file
-    filenametag = ".mseed"       # File extension (also used for SEED files)
-
-    # Example:
-    # SC.A0801.40.EIE.D.20221400520064953.sac
-    # File name format: NET.STATION.LOC.CHANNEL.OTHERS.mseed
-    namekeyindex = [0, 1]        # Indices of NET and STATION in the file name
-    channelindex = 3             # Index of CHANNEL (component identifier) in the file name;
-                                 # for nationwide stations, this is typically 5
-
-    chnames = [
-        ["BHE", "BHN", "BHZ"],
-        ["SHE", "SHN", "SHZ"],
-        ["HHE", "HHN", "HHZ"],
-        ["EIE", "EIN", "EIZ"],
-        ["HNN", "HNE", "HNZ"],
-        ["E", "N", "Z"],
-    ]                             # Channel component names; all possible sets must be included.
-                                  # Z component must be last for first-motion polarity calculation
-
-    polar = False                 # Whether to output first-motion direction
-
-    # Output configuration
-    ifplot = False                # Whether to plot picked waveforms
-    ifreal = False                # Whether to output REAL association data (daily interval)
-    snritv = 100                  # Time window length for SNR calculation
-    bandpass = [1, 10]            # Bandpass filter parameters for SNR calculation
-
+namekeyindex = [0, 1]
 ```
 
+That is:
+
+* The picker groups files **solely based on the filename fields specified by `namekeyindex`**
+  (e.g., `NET` and `STATION`).
+* **Time information in the filename is ignored** unless it is explicitly included in `namekeyindex`.
+
+As a result:
+
+* If a directory contains multiple time segments for the same station (e.g., daily or hourly files),
+* and those files share the same `NET.STATION` identifiers,
+* **they will all be treated as belonging to the same station**, causing ambiguity.
+
+➡ **Such files will NOT be processed unless the time dimension is explicitly added to `namekeyindex`.**
+
+
+#### 3.1.4 Recommended File Naming Convention
+
+Example filename:
+
+```
+SC.A0801.40.EIE.D.20221400520064953.sac
+```
+
+Expected format:
+
+```
+NET.STATION.LOC.CHANNEL.OTHERS.mseed
+```
+
+Relevant configuration:
+
+```python
+namekeyindex = [0, 1]   # NET, STATION
+channelindex = 3        # CHANNEL
+```
+
+If you want to process **multiple time segments per station**, you must:
+
+* Either separate them into different directories, **or**
+* Include a time-related field (e.g., date or start time) in `namekeyindex`.
+
+
+#### 3.1.5 Channel Name Matching
+
+The picker supports the following three-component channel groups:
+
+```python
+chnames = [
+    ["BHE", "BHN", "BHZ"],
+    ["SHE", "SHN", "SHZ"],
+    ["HHE", "HHN", "HHZ"],
+    ["EIE", "EIN", "EIZ"],
+    ["HNN", "HNE", "HNZ"],
+    ["E", "N", "Z"],
+]
+```
+
+Notes:
+
+* **All possible channel name combinations must be listed**.
+* The **Z component must always be the last entry**, as it is required for first-motion polarity calculation.
+* You need to **modify  `channelindex`** in config file to tell which part in name indicate the channel. 
 
 
 ### 3.2 Seimic assosication
