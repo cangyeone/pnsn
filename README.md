@@ -442,7 +442,13 @@ write_events_real_format(
 
 ## License
 
-* **Research and academic use:** released under **GPLv3**.
+This code is licensed under CC BY-NC-ND 4.0.
+
+Any academic use MUST:
+1. Obtain prior permission
+2. Explicitly cite the author
+3. Acknowledge the contribution as core methodology
+
 * **Commercial use / integration / redistribution:** please contact the corresponding author to obtain permission and discuss licensing terms (email below). 
 
 
