@@ -11,7 +11,8 @@
 
 **Code for:** 
 * **Title:** *A Deep Learning Framework for Pg/Sg/Pn/Sn Phase Picking and Its Nationwide Implementation in Mainland China* 
-* **Authors:** Yuqi Cai, Ziye Yu, et al. ([yuziye@cea-igp.ac.cn](mailto:yuziye@cea-igp.ac.cn)) 
+* **Authors:** Yuqi Cai, Ziye Yu, et al. ([yuziye@cea-igp.ac.cn](mailto:yuziye@cea-igp.ac.cn))
+* **DOI:** https://doi.org/10.1029/2025JH000944
 
 All models in this repository are trained on **2009–2019** national seismic network data at **100 Hz**. They are designed for **direct inference on continuous three-component waveforms** (E/N/Z) for automatic phase picking.
 
