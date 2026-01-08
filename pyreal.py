@@ -582,7 +582,7 @@ def travel_time_homo(dx_km, dy_km, dep_km, v, elev_km, sv):
     r = np.sqrt(dx_km*dx_km + dy_km*dy_km + dep_km*dep_km)
     return r / v + elev_km / sv
 
-@njit
+@njit(parallel=True, cache=True)
 def eval_grid_homo_fast(
     # grid (local km coordinates)
     gx_km, gy_km, gdep_km,  # shape (nnn,)
