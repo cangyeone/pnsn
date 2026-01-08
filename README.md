@@ -442,15 +442,22 @@ write_events_real_format(
 
 ## License
 
-This code is licensed under CC BY-NC-ND 4.0.
+This project is licensed under the GNU General Public License v3.0 (GPL-3.0) for non-commercial academic and private research use.
+Permitted Use (Academic / Private Research)
+- Use, study, and modify the code for non-commercial academic research or personal research purposes
+- Redistribution of modified or unmodified versions must comply with GPL-3.0
+- Proper citation of the author and this repository is required in any academic publication or derivative work
+- This code constitutes core methodology and must be acknowledged as such
 
-Any academic use MUST:
-1. Obtain prior permission
-2. Explicitly cite the author
-3. Acknowledge the contribution as core methodology
+Commercial Use
+Any commercial use, including but not limited to:
+- Commercial research and development
+- Product integration or deployment
+- Paid services, proprietary systems, or closed-source redistribution
 
-* **Commercial use / integration / redistribution:** please contact the corresponding author to obtain permission and discuss licensing terms (email below). 
-
+is NOT permitted under this license.
+For commercial licensing, redistribution, or integration into proprietary systems,
+please contact the corresponding author to obtain explicit written permission and discuss licensing terms.
 
 ## Contact
 Yuqi Cai: caiyuqiming@foxmail.com
