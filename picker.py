@@ -9,7 +9,7 @@ from multiprocessing import Barrier, Lock, Process
 import time
 from datetime import datetime
 import pickle
-from numpy.lib.function_base import percentile
+
 import obspy
 import numpy as np
 import math
@@ -350,6 +350,36 @@ class Process():
                 feedq.put(info)
             #print(f"当前文件夹{root}, {len(files)}, {feedq.qsize()}")
 
+    def infer(self, dataq, outq):
+        with torch.no_grad():
+            device = torch.device(self.device_name)
+            lppn = torch.jit.load(self.modeldir)
+            lppn.eval()
+            lppn.to(device)
+            #lppn.half()
+            print("处理进程加载完成，准备处理数据")
+            while True:
+                temp = dataq.get()
+                if len(temp)==0:break 
+                if len(temp)==1:
+                    outq.put([temp["errinfo"]])
+                    continue 
+                #print("已获取", temp["root"])
+                root = f"{temp['root']}/{temp['key']}"
+                data = temp["data"]
+                #print("当前数据中", f"{temp['root']}+++++{temp['key']}" )
+                t1 = time.perf_counter()
+                #print("处理开始", dataq.qsize())
+                data = np.vstack(data).T 
+                with torch.no_grad():
+                    nnout = lppn(torch.tensor(data, dtype=torch.float, device=device))
+                    nnout = nnout.cpu().numpy()
+                # print("处理结束")
+                t2 = time.perf_counter()
+                #print("ROOT", root)
+                # $print(f"数据{temp['root']}/{temp['key']}纯处理时间：{t2-t1}")
+                outq.put([root, nnout, temp["data"], temp["stime"],
+                          temp["fdata"], temp["pkey"], temp["errinfo"]])
     def infer2(self, dataq, outq):
         import numpy as np
         import onnxruntime as ort
@@ -633,12 +663,13 @@ class Process():
 if __name__ == "__main__":
     # 处理输出某个时间之后的所有震相
     parser = argparse.ArgumentParser(description="拾取连续波形")
-    parser.add_argument('-i', '--input', default="data", help="输入连续波形")
     parser.add_argument(
-        '-o', '--output', default="data/20220619224053N00", help="输出文件名")
+        '-i', '--input', default="data/compare_dataset/continous_usa/2019", help="输入连续波形")
     parser.add_argument(
-        '-m', '--model', default="pickers/lppnm.onnx", help="模型文件lppnmodel")
-    parser.add_argument('-d', '--device', default="cpu",
+        '-o', '--output', default="data/continous_usa_pha", help="输出文件名")
+    parser.add_argument(
+        '-m', '--model', default="pickers/pnsn.v3.diff.jit", help="模型文件lppnmodel")
+    parser.add_argument('-d', '--device', default="cuda:1",
                         help="模型文件lppnmodel")
     args = parser.parse_args()
     infile = args.input
