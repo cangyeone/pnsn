@@ -68,7 +68,7 @@ def post(prob, time, prob_thresh=0.1, nms_win=200):
     return np.concatenate(output, axis=0)
 
         
-mname = "pickers/lppnm.onnx" # 其他onnx均可
+mname = "pickers/pnsn.v1.onnx" # 其他onnx均可
 sess = ort.InferenceSession(mname, providers=['CPUExecutionProvider'])#使用pickers中的onnx文件
 
 # 读取数据
@@ -78,7 +78,7 @@ st3 = obspy.read("data/waveform/X1.53085.01.BHZ.D.20122080726235953.sac")
 data = [st1[0].data, st2[0].data, st3[0].data] 
 # 任意长度数据均可
 # 数据不需要滤波、预处理、归一化等操作
-x = np.stack(data, axis=1).astype(np.float32)[:7550] #[N, 3]->一天 [8640000]100Hz 
+x = np.stack(data, axis=1).astype(np.float32)[:] #[N, 3]->一天 [8640000]100Hz 
 # 直接运行即可
 prob, time = sess.run(["prob", "time"], {"wave":x})
 phase = post(prob, time, 0.2, 200)

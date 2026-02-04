@@ -1,6 +1,6 @@
 import torch 
 import torch.nn as nn 
-from models.UNet import PhaseNetLight 
+from models.PhaseNetLight import PhaseNetLight 
 class Picker(PhaseNetLight):
     def __init__(self):
         super().__init__()
@@ -78,7 +78,7 @@ class Picker(PhaseNetLight):
         return y 
 
 model = Picker() 
-ckpt = torch.load("model_list/9_sc.pt", weights_only=False, map_location="cpu")
+ckpt = torch.load("ckpt/9_sc.pt", weights_only=False, map_location="cpu")
 state = ckpt.state_dict()
 for k in state:
     v = state[k]
