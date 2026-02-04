@@ -1,5 +1,5 @@
 import torch
-from models.BRNN import BRNN
+from models.BRNNPNSN import BRNN
 from jit_picker_base import SlidingWindowPicker
 
 

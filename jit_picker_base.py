@@ -10,7 +10,7 @@ class SlidingWindowPicker(nn.Module):
     is expected to use keys prefixed with ``model.``; legacy checkpoints without
     the prefix are supported by automatically adding it during load.
     """
-
+    __annotations__ = {}   # Testing for torchscript
     def __init__(self, model_ctor, ckpt_path=None, *, norm="std", diff=False, state_dict=None,
                  seqlen=6144, overlap=256, threshold=0.1, min_gap=1000):
         super().__init__()

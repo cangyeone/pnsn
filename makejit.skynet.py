@@ -177,7 +177,7 @@ class Skynet(nn.Module):
 
         return self.softmax(X19)
 
-from models.UNet import PhaseNetLight 
+ 
 import torch 
 
 class Picker(Skynet):
@@ -287,7 +287,7 @@ class Picker(Skynet):
         return y 
 
 model = Picker() 
-ckpt = torch.load("skynet/skynet_models/seisbench_skynet.pt", weights_only=False, map_location="cpu")
+ckpt = torch.load("ckpt/seisbench_skynet.pt", weights_only=False, map_location="cpu")
 
 model.load_state_dict(ckpt)
 model.eval()
