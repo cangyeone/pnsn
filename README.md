@@ -177,6 +177,91 @@ To regenerate the exported ONNX files:
   
 **The onnx model can use picker.py for post-processing as it is outside of the model itself** 
 
+
+### ⚠️ Performance Warning: NMS Post-processing on MPS / CUDA
+
+The default picker implementation (e.g., in `jit_picker_base.py`) performs non-maximum suppression (NMS) and post-processing inside TorchScript using iterative masking operations:
+
+```python
+oc = oc.cpu()
+ot = ot.cpu()
+
+output = []
+for itr in range(C - 1):
+    ...
+```
+
+#### ❗ Issue
+
+When running on **Apple Silicon (MPS)** or **CUDA GPUs**, this post-processing step can become **extremely slow**, especially when:
+
+* The probability threshold is low (e.g., `threshold ≤ 0.1`)
+* The input waveform is long (e.g., full-day continuous data)
+* The model produces many candidate picks (thousands or more)
+
+This is because the current NMS implementation involves:
+
+* repeated `masked_select`
+* Python-level loops
+* branch-heavy logic
+
+These operations are **not efficient on GPU/MPS backends** and may dominate total runtime (e.g., tens of seconds to minutes per sample).
+
+---
+
+#### ✅ Recommended Solutions
+
+##### Option 1 — Move NMS to CPU (quick fix)
+
+Before post-processing, explicitly move tensors to CPU:
+
+```python
+oc = oc.cpu()
+ot = ot.cpu()
+```
+
+This often significantly improves performance since CPU handles irregular control flow better.
+
+---
+
+##### Option 2 — Use ONNX + External NMS (recommended)
+
+A more efficient and scalable approach is:
+
+1. Export the picker model to **ONNX**
+2. Run inference with **ONNX Runtime** (CPU / CUDA / CoreML)
+3. Perform NMS externally using a heap-based or peak-based algorithm (NumPy)
+
+Example workflow:
+
+```text
+waveform → ONNX model → (prob, time)
+        → external NMS (heap / peak detection)
+        → final picks
+```
+
+Advantages:
+
+* Avoids slow TorchScript loops
+* Better performance on long continuous data
+* More flexible post-processing
+* Consistent behavior across CPU / CUDA / MPS
+
+---
+
+### 📌 Summary
+
+| Method                        | Speed             | Recommended |
+| ----------------------------- | ----------------- | ----------- |
+| TorchScript NMS (default)     | ❌ Slow on GPU/MPS | No          |
+| CPU NMS (move tensors to CPU) | ⚠️ Medium         | OK          |
+| ONNX + external NMS           | ✅ Fast            | **Best**    |
+
+---
+
+
+
+
 ## 3. Directly picking up continuous data 
 
 ### 3.1 Phase picking 
