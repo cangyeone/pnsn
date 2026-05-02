@@ -83,6 +83,8 @@ class SlidingWindowPicker(nn.Module):
                 oc = torch.cat([oc, oc2], dim=0)
                 ot = torch.cat([ot, ot], dim=0) 
             #print(oc.shape, ot.shape)
+            oc = oc.cpu()
+            ot = ot.cpu()
             output = []
             for itr in range(C-1):
                 pc = oc[:, itr + 1]
